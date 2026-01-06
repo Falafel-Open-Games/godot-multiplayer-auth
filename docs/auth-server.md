@@ -7,6 +7,10 @@ This project relies on an external auth service to validate JWTs.
 - Verification endpoint (path configurable; default `/whoami`)
   - Auth: `Authorization: Bearer <jwt>`
   - Response: HTTP 200 for valid tokens, non-200 otherwise.
+  - Optional JSON response fields (used when present):
+    - `exp` (JWT expiry) → forwarded to clients via `auth_ok(exp)`.
+    - `sub` or `address` → stored for logging/traceability.
+    - `nonce` → stored for traceability.
 
 ## JWT Expectations
 

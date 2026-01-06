@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-godot:
+    runs-on: ubuntu-24.04
+    container:
+      image: fczuardi/godot-ci:4.5.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Godot runtime deps
+        run: apt-get update && apt-get install -y libfontconfig1
+      - name: Run Godot WS auth test
+        env:
+          GODOT_BIN: godot
+        run: node scripts/godot-ws-auth.mjs

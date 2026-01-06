@@ -1,0 +1,57 @@
+[gd_scene load_steps=3 format=3 uid="uid://be04ytukty3ij"]
+
+[ext_resource type="Script" uid="uid://beqn8wxtk4pgd" path="res://ws_client.gd" id="1"]
+[ext_resource type="Script" uid="uid://weosg7pewlm" path="res://ui.gd" id="2_uedoe"]
+
+[node name="WsRpc" type="Node"]
+script = ExtResource("1")
+
+[node name="UI" type="Control" parent="." node_paths=PackedStringArray("output", "login_button")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_uedoe")
+output = NodePath("MarginContainer/VBoxContainer/VBoxContainer/Output Display")
+login_button = NodePath("MarginContainer/VBoxContainer/VBoxContainer/Sign In Button")
+
+[node name="MarginContainer" type="MarginContainer" parent="UI"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/MarginContainer"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="UI/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Godot WS Client Demo"
+horizontal_alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Output Display" type="RichTextLabel" parent="UI/MarginContainer/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Please sign in."
+
+[node name="Sign In Button" type="Button" parent="UI/MarginContainer/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+text = "Sign In"
+
+[node name="Version" type="Label" parent="UI/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "build: ynzuvnvq"
+horizontal_alignment = 2
