@@ -15,6 +15,11 @@ Minimal headless Godot MultiplayerAPI server that enforces JWT-authenticated ses
 - Config via environment variables (auth base URL, WS port, audience/issuer).
 - Minimal run scripts for local testing.
 
+## Docs
+
+- `docs/auth-server.md` — auth server requirements (`/whoami` contract).
+- `docs/rpc-api.md` — RPC auth contract.
+
 ## License
 
 MIT. See `LICENSE`.
