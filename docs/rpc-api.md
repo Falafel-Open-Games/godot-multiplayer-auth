@@ -16,7 +16,7 @@ The server uses `MultiplayerAPI` + `WebSocketMultiplayerPeer`. Clients must call
   - Sent when the JWT is valid.
   - `exp` is the JWT expiry timestamp (seconds since epoch); `0` if the verify endpoint does not return it.
 - `auth_error(reason: String)`
-  - Sent on auth failure before disconnect.
+  - Sent on auth failure before disconnect (currently always `unauthorized`).
 - `pong()`
   - Reply to `ping()`.
 
