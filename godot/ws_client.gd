@@ -19,6 +19,7 @@ var next_ping_ms := 0
 var remaining_pings := 0
 var pending_pongs := 0
 var headless_mode := false
+var last_auth_error_reason := ""
 
 # === Lifecycle: connect to server ===
 func _ready() -> void:
@@ -33,6 +34,7 @@ func _ready() -> void:
 	if auth_token == "":
 		push_error("AUTH_TOKEN is required for headless tests")
 		return
+	auth_token = auth_token.strip_edges()
 	headless_mode = true
 	connect_with_token(ws_url, auth_token)
 
@@ -58,7 +60,10 @@ func _on_connection_failed() -> void:
 	_handle_error("Connection failed")
 
 func _on_server_disconnected() -> void:
-	_handle_error("Server disconnected")
+	var reason = ""
+	if last_auth_error_reason != "":
+		reason = " (last auth error: %s)" % last_auth_error_reason
+	_handle_error("Server disconnected%s" % reason)
 
 # === RPC responses (server → client) ===
 @rpc("authority", "reliable")
@@ -74,6 +79,7 @@ func auth_ok(exp_ts: int) -> void:
 @rpc("authority", "reliable")
 func auth_error(reason: String) -> void:
 	auth_deadline_ms = 0
+	last_auth_error_reason = reason
 	_handle_error("Auth error: %s" % reason)
 	auth_failed.emit(reason)
 
@@ -98,7 +104,7 @@ func ping() -> void:
 # === Utilities ===
 func connect_with_token(url: String, token: String) -> void:
 	ws_url = url
-	auth_token = token
+	auth_token = token.strip_edges()
 	if ws_url == "" or auth_token == "":
 		_handle_error("Missing WS URL or auth token.")
 		return
@@ -110,14 +116,18 @@ func connect_with_token(url: String, token: String) -> void:
 		_handle_error("WS client connect failed: %s" % err)
 		return
 	multiplayer.multiplayer_peer = ws_peer
-	multiplayer.connected_to_server.connect(_on_connected)
-	multiplayer.connection_failed.connect(_on_connection_failed)
-	multiplayer.server_disconnected.connect(_on_server_disconnected)
+	if not multiplayer.connected_to_server.is_connected(_on_connected):
+		multiplayer.connected_to_server.connect(_on_connected)
+	if not multiplayer.connection_failed.is_connected(_on_connection_failed):
+		multiplayer.connection_failed.connect(_on_connection_failed)
+	if not multiplayer.server_disconnected.is_connected(_on_server_disconnected):
+		multiplayer.server_disconnected.connect(_on_server_disconnected)
 	auth_deadline_ms = Time.get_ticks_msec() + DEFAULT_AUTH_TIMEOUT_MS
 	authed = false
 	remaining_pings = 0
 	pending_pongs = 0
 	next_ping_ms = 0
+	last_auth_error_reason = ""
 	_emit_status("WS client connecting to %s with %s" % [ws_url, _redact_token(auth_token)])
 	set_process(true)
 

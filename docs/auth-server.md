@@ -9,8 +9,9 @@ This project relies on an external auth service to validate JWTs.
   - Response: HTTP 200 for valid tokens, non-200 otherwise.
   - Optional JSON response fields (used when present):
     - `exp` (JWT expiry) → forwarded to clients via `auth_ok(exp)`.
-    - `sub` or `address` → stored for logging/traceability.
-    - `nonce` → stored for traceability.
+    - `sub` → stored for logging/traceability (preferred identifier).
+  - For non-200 responses, an optional JSON `{ "error": "token_expired" }` (or similar)
+    may be returned; the server logs this reason but still treats it as unauthorized.
 
 ## JWT Expectations
 

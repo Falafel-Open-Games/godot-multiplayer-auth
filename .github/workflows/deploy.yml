@@ -1,0 +1,33 @@
+name: Deploy to Fly.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      fly_app:
+        description: "Fly app name (defaults to fly.toml app)"
+        required: false
+        default: ""
+  push:
+    branches: [main, ws-fly-deploy]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate fly.toml from template
+        run: |
+          if [ -n "${{ inputs.fly_app }}" ]; then
+            app_name="${{ inputs.fly_app }}"
+          else
+            app_name="${{ vars.FLY_APP_NAME }}"
+          fi
+          test -n "$app_name" || { echo "FLY_APP_NAME is required"; exit 1; }
+          sed "s/YOUR_APP_NAME/${app_name}/" fly.example.toml > fly.toml
+          echo "FLY_APP_NAME=$app_name" >> "$GITHUB_ENV"
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy
+        run: |
+          flyctl deploy --app "${FLY_APP_NAME}" --config fly.toml --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
