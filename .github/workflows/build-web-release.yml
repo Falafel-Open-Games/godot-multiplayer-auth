@@ -1,0 +1,71 @@
+name: Build Web Export & Release
+
+on:
+  push:
+    branches: [main, ws-fly-deploy]
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: 4.5.1
+  GODOT_RELEASE_NAME: stable
+
+jobs:
+  build-web:
+    name: Export Web HTML
+    runs-on: ubuntu-24.04
+    container:
+      image: fczuardi/godot-ci:4.5.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup export templates
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/
+          mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE_NAME} \
+             ~/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE_NAME}
+
+      - name: Export Web (HTML)
+        run: |
+          mkdir -p build/html-client/game
+          godot --headless --verbose \
+            --path . \
+            --export-release "Web Client" \
+            build/html-client/game/index.html
+
+      - name: Upload web html artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-html-build
+          path: build/html-client
+
+  github-release-latest:
+    name: Update GitHub 'latest' release (web)
+    needs: build-web
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download web html artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-html-build
+          path: build/html-client
+
+      - name: Create archive
+        run: |
+          mkdir -p dist
+          tar czf dist/godot-ws-web-html.tar.gz -C build/html-client .
+
+      - name: Create / update 'latest' release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest web build
+          draft: false
+          prerelease: true
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
