@@ -1,0 +1,11 @@
+# flyctl launch added from .gitignore
+**/.DS_Store
+**/.env
+**/node_modules
+
+**/godot/.godot
+**/godot/.editorconfig
+
+# flyctl launch added from .jj/.gitignore
+.jj/*
+fly.toml
