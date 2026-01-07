@@ -4,3 +4,4 @@ node_modules
 
 godot/.godot/
 godot/.editorconfig
+fly.toml
