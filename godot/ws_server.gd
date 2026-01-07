@@ -26,7 +26,13 @@ func _ready() -> void:
 	var ws_peer = WebSocketMultiplayerPeer.new()
 	var err = ws_peer.create_server(port)
 	if err != OK:
-		push_error("WS server create failed: %s" % err)
+		if err == ERR_ALREADY_IN_USE:
+			push_error("WS server create failed: port %s is already in use." % port)
+		elif err == ERR_INVALID_PARAMETER:
+			push_error("WS server create failed: invalid port %s." % port)
+		else:
+			push_error("WS server create failed on port %s (err %s)." % [port, err])
+		get_tree().quit(1)
 		return
 	multiplayer.multiplayer_peer = ws_peer
 	multiplayer.peer_connected.connect(_on_peer_connected)
@@ -42,6 +48,8 @@ func _process(_delta: float) -> void:
 	var now = _now_ms()
 	for peer_id in clients.keys():
 		var client = clients[peer_id]
+		if client.closing:
+			continue
 		# Close unauthenticated connections that do not send AUTH quickly.
 		if not client.authed and now - client.connected_at > AUTH_TIMEOUT_MS:
 			_reject_auth(peer_id, "auth_timeout")
@@ -52,6 +60,7 @@ func _on_peer_connected(peer_id: int) -> void:
 		"authed": false,
 		"connected_at": _now_ms(),
 		"auth_inflight": false,
+		"closing": false,
 	}
 	print("WS peer connected: %s" % peer_id)
 
@@ -131,7 +140,10 @@ func _on_verify_completed(
 		_reject_auth(peer_id, "auth_request_failed")
 		return
 	if response_code != 200:
-		_reject_auth(peer_id, "invalid_token")
+		var reason = _extract_error_reason(body)
+		if reason == "":
+			reason = "invalid_token"
+		_reject_auth(peer_id, reason)
 		return
 	var payload = {}
 	var json = JSON.new()
@@ -139,27 +151,39 @@ func _on_verify_completed(
 	if err == OK and typeof(json.data) == TYPE_DICTIONARY:
 		payload = json.data
 	clients[peer_id].authed = true
-	var address = str(payload.get("address", ""))
-	if address == "":
-		address = str(payload.get("sub", ""))
-	clients[peer_id].address = address
-	clients[peer_id].nonce = str(payload.get("nonce", ""))
+	var subject = str(payload.get("sub", ""))
+	clients[peer_id].address = subject
 	clients[peer_id].exp = int(payload.get("exp", 0))
 	rpc_id(
 		peer_id,
 		"auth_ok",
 		clients[peer_id].exp
 	)
-	print("Auth ok: %s %s" % [peer_id, _redact_token(token)])
+	var label = "unknown"
+	if subject != "":
+		label = subject
+	print("Auth ok: %s %s %s" % [peer_id, label, _redact_token(token)])
 
 func _reject_auth(peer_id: int, reason: String) -> void:
 	if not clients.has(peer_id):
 		return
-	rpc_id(peer_id, "auth_error", reason)
-	_disconnect_peer(peer_id, reason)
+	if clients[peer_id].closing:
+		return
+	print("Auth rejected: %s %s" % [peer_id, reason])
+	clients[peer_id].closing = true
+	rpc_id(peer_id, "auth_error", "unauthorized")
+	_schedule_disconnect(peer_id, reason)
+
+func _schedule_disconnect(peer_id: int, reason: String) -> void:
+	var timer = get_tree().create_timer(0.1)
+	timer.timeout.connect(func() -> void:
+		_disconnect_peer(peer_id, reason)
+	)
 
 func _disconnect_peer(peer_id: int, reason: String) -> void:
 	if multiplayer.multiplayer_peer == null:
+		return
+	if not clients.has(peer_id):
 		return
 	multiplayer.multiplayer_peer.disconnect_peer(peer_id, true)
 	clients.erase(peer_id)
@@ -174,6 +198,20 @@ func _normalize_verify_path(path: String) -> String:
 	if path.begins_with("/"):
 		return path
 	return "/" + path
+
+func _extract_error_reason(body: PackedByteArray) -> String:
+	if body.size() == 0:
+		return ""
+	var json = JSON.new()
+	var err = json.parse(body.get_string_from_utf8())
+	if err != OK:
+		return ""
+	if typeof(json.data) != TYPE_DICTIONARY:
+		return ""
+	var payload = json.data as Dictionary
+	if not payload.has("error"):
+		return ""
+	return str(payload.get("error", ""))
 
 # === Utilities: token redaction, time ===
 func _redact_token(token: String) -> String:
