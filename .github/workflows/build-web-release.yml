@@ -28,9 +28,9 @@ jobs:
 
       - name: Export Web (HTML)
         run: |
-          mkdir -p build/html-client/game
+          mkdir -p godot/build/html-client/game
           godot --headless --verbose \
-            --path . \
+            --path godot \
             --export-release "Web Client" \
             build/html-client/game/index.html
 
@@ -38,7 +38,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-html-build
-          path: build/html-client
+          path: godot/build/html-client
 
   github-release-latest:
     name: Update GitHub 'latest' release (web)
