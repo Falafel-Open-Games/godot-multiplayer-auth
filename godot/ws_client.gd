@@ -3,12 +3,15 @@ extends Node
 signal status(message: String)
 signal auth_ready(exp_ts: int)
 signal auth_failed(reason: String)
+signal connection_closed(reason: String)
 
 # === Configuration ===
 const DEFAULT_WS_URL = "ws://127.0.0.1:8081"
 const DEFAULT_AUTH_TIMEOUT_MS = 5000
 const HEARTBEAT_INTERVAL_MS = 1000
 const HEARTBEAT_COUNT = 3
+const RECONNECT_DELAY_MS = 5000
+const RECONNECT_MAX_ATTEMPTS = 0 # 0 = unlimited
 
 # === Runtime state ===
 var ws_url: String
@@ -20,6 +23,9 @@ var remaining_pings := 0
 var pending_pongs := 0
 var headless_mode := false
 var last_auth_error_reason := ""
+var reconnect_attempts := 0
+var reconnect_pending := false
+var allow_reconnect := true
 
 # === Lifecycle: connect to server ===
 func _ready() -> void:
@@ -45,6 +51,7 @@ func _process(_delta: float) -> void:
 	multiplayer.multiplayer_peer.poll()
 	var now = Time.get_ticks_msec()
 	if auth_deadline_ms > 0 and now > auth_deadline_ms:
+		auth_deadline_ms = 0
 		_handle_error("Auth timeout")
 	if authed and remaining_pings > 0 and now >= next_ping_ms:
 		remaining_pings -= 1
@@ -80,6 +87,7 @@ func auth_ok(exp_ts: int) -> void:
 func auth_error(reason: String) -> void:
 	auth_deadline_ms = 0
 	last_auth_error_reason = reason
+	allow_reconnect = false
 	_handle_error("Auth error: %s" % reason)
 	auth_failed.emit(reason)
 
@@ -102,7 +110,7 @@ func ping() -> void:
 	pass
 
 # === Utilities ===
-func connect_with_token(url: String, token: String) -> void:
+func connect_with_token(url: String, token: String, reset_reconnect: bool = true) -> void:
 	ws_url = url
 	auth_token = token.strip_edges()
 	if ws_url == "" or auth_token == "":
@@ -110,6 +118,7 @@ func connect_with_token(url: String, token: String) -> void:
 		return
 	if multiplayer.multiplayer_peer != null:
 		multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
 	var ws_peer = WebSocketMultiplayerPeer.new()
 	var err = ws_peer.create_client(ws_url)
 	if err != OK:
@@ -128,6 +137,10 @@ func connect_with_token(url: String, token: String) -> void:
 	pending_pongs = 0
 	next_ping_ms = 0
 	last_auth_error_reason = ""
+	if reset_reconnect:
+		reconnect_attempts = 0
+		reconnect_pending = false
+		allow_reconnect = true
 	_emit_status("WS client connecting to %s with %s" % [ws_url, _redact_token(auth_token)])
 	set_process(true)
 
@@ -138,8 +151,33 @@ func _emit_status(message: String) -> void:
 func _handle_error(message: String) -> void:
 	status.emit(message)
 	push_error(message)
+	auth_deadline_ms = 0
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
+	set_process(false)
+	connection_closed.emit(message)
+	if not headless_mode:
+		_schedule_reconnect()
 	if headless_mode:
 		get_tree().quit(1)
+
+func _schedule_reconnect() -> void:
+	if not allow_reconnect:
+		return
+	if reconnect_pending:
+		return
+	if RECONNECT_MAX_ATTEMPTS > 0 and reconnect_attempts >= RECONNECT_MAX_ATTEMPTS:
+		_emit_status("Reconnect attempts exhausted.")
+		return
+	reconnect_pending = true
+	reconnect_attempts += 1
+	_emit_status("Reconnecting in %s ms (attempt %s)" % [RECONNECT_DELAY_MS, reconnect_attempts])
+	var timer = get_tree().create_timer(RECONNECT_DELAY_MS / 1000.0)
+	timer.timeout.connect(func() -> void:
+		reconnect_pending = false
+		connect_with_token(ws_url, auth_token, false)
+	)
 
 func _redact_token(token: String) -> String:
 	if token.length() <= 12:
