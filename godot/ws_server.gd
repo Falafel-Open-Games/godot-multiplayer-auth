@@ -51,8 +51,12 @@ func _process(_delta: float) -> void:
 		if client.closing:
 			continue
 		# Close unauthenticated connections that do not send AUTH quickly.
-		if not client.authed and now - client.connected_at > AUTH_TIMEOUT_MS:
-			_reject_auth(peer_id, "auth_timeout")
+		if not client.authed:
+			if client.auth_inflight:
+				if now - client.auth_started_at > AUTH_TIMEOUT_MS:
+					_reject_auth(peer_id, "auth_timeout")
+			elif now - client.connected_at > AUTH_TIMEOUT_MS:
+				_reject_auth(peer_id, "auth_timeout")
 
 # === Connection handlers: track client lifecycle ===
 func _on_peer_connected(peer_id: int) -> void:
@@ -60,6 +64,7 @@ func _on_peer_connected(peer_id: int) -> void:
 		"authed": false,
 		"connected_at": _now_ms(),
 		"auth_inflight": false,
+		"auth_started_at": 0,
 		"closing": false,
 	}
 	print("WS peer connected: %s" % peer_id)
@@ -80,6 +85,7 @@ func auth(token: String) -> void:
 	if clients[peer_id].auth_inflight:
 		return
 	clients[peer_id].auth_inflight = true
+	clients[peer_id].auth_started_at = _now_ms()
 	print("Auth attempt: %s %s" % [peer_id, _redact_token(token)])
 	_verify_token(peer_id, token)
 

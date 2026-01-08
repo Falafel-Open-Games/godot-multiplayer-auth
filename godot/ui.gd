@@ -5,89 +5,39 @@ extends Control
 
 var jwt_token := ""
 var jwt_expires_at := ""
-var js_callback = null
 var ws_client = null
+var wrapper_auth: WrapperAuthBridge = null
 
 func _ready() -> void:
 	ws_client = get_parent()
+	wrapper_auth = WrapperAuthBridge.new()
+	add_child(wrapper_auth)
+	wrapper_auth.auth_token_received.connect(_on_auth_token_received)
+	wrapper_auth.auth_error.connect(_on_auth_error)
 	output.text = ""
 	_log_line("Please sign in")
 	login_button.pressed.connect(_on_login_pressed)
-	_register_message_listener()
 	_bind_ws_signals()
 
 func _on_login_pressed() -> void:
-	if not _is_web():
-		_log_line("Wallet sign-in is available in HTML exports only.")
+	var error = ""
+	if wrapper_auth != null:
+		error = wrapper_auth.request_sign_in()
+	if error != "":
+		_log_line(error)
 		return
 	_log_line("Signing in...")
-	var window = JavaScriptBridge.get_interface("window")
-	if window == null:
-		output.text = "Wrapper not available."
-		return
-	var parent = window.parent
-	if parent == null:
-		_log_line("Wrapper not available.")
-		return
-	var tabletop = parent.tabletopAuth
-	if tabletop == null:
-		_log_line("Wrapper auth not available.")
-		return
-	tabletop.requestSignIn()
 
-func _register_message_listener() -> void:
-	if not _is_web():
-		return
-	var window = JavaScriptBridge.get_interface("window")
-	if window == null:
-		return
-	js_callback = JavaScriptBridge.create_callback(_on_js_message)
-	window.addEventListener("message", js_callback)
-
-func _on_js_message(args) -> void:
-	if args.is_empty():
-		return
-	var event = args[0]
-	if event == null:
-		return
-	var data = event.data
-	if data == null:
-		return
-	var message_type = ""
-	if data is Dictionary:
-		message_type = str(data.get("type", ""))
-	else:
-		message_type = str(data.type)
-	if message_type != "AUTH_TOKEN":
-		return
-	var token = ""
-	var expires_at = ""
-	if data is Dictionary:
-		token = str(data.get("token", ""))
-		expires_at = str(data.get("expires_at", ""))
-	else:
-		token = str(data.token)
-		expires_at = str(data.expires_at)
-	if token == "":
-		_log_line("Login failed.")
-		return
+func _on_auth_token_received(token: String, expires_at: String, ws_url: String) -> void:
 	jwt_token = token
 	jwt_expires_at = expires_at
 	_log_line("Token acquired — ready to connect.")
-	var ws_url = ""
-	if data is Dictionary:
-		ws_url = str(data.get("ws_url", ""))
-	else:
-		ws_url = str(data.ws_url)
-	if ws_url == "":
-		_log_line("WS URL missing; configure in wrapper.")
-		return
 	if ws_client != null and ws_client.has_method("connect_with_token"):
 		_log_line("Connecting to WS server...")
 		ws_client.connect_with_token(ws_url, jwt_token)
 
-func _is_web() -> bool:
-	return OS.has_feature("web")
+func _on_auth_error(message: String) -> void:
+	_log_line(message)
 
 func _bind_ws_signals() -> void:
 	if ws_client == null:
